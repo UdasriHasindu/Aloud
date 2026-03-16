@@ -1,194 +1,205 @@
 """
 core/tts_engine.py
 -------------------
-Text-to-Speech engine: converts text strings into spoken audio.
+Text-to-Speech engine powered by Piper TTS — a neural, offline TTS engine
+that produces human-quality speech using ONNX voice models.
 
-Key design decisions
---------------------
-1. We wrap `pyttsx3` in our own class so the GUI layer is decoupled from
-   the TTS library. If we ever swap pyttsx3 for Coqui TTS the GUI won't
-   change at all.
+How Piper works
+---------------
+  1. Load a voice model (.onnx file) + its config (.onnx.json)
+  2. Call voice.synthesize(text) → yields chunks of raw PCM audio bytes
+  3. Play those bytes through the sound card using `sounddevice`
 
-2. TTS runs in a BACKGROUND THREAD. Speaking a long page of text can take
-   minutes. If we ran it on the main (GUI) thread the window would freeze.
-   Threading keeps the UI responsive while audio plays.
+Why Piper over espeak-ng?
+--------------------------
+  - espeak-ng uses rule-based synthesis → robotic, mechanical sound
+  - Piper uses a trained neural network → natural, human-sounding speech
+  - Both are 100% offline and free
 
-3. We use threading.Event objects as simple on/off flags to implement
-   pause/resume without needing complex synchronisation code.
+Learning note: Generators and streaming audio
+----------------------------------------------
+`voice.synthesize()` is a Python *generator* — it yields small chunks of
+audio as they are computed instead of waiting for the full synthesis to
+finish. This means audio starts playing faster (lower latency).
 
-Learning note: Threading basics
---------------------------------
-`threading.Thread(target=fn)` creates a new execution path.
-`.start()` launches it.
-`threading.Event` is like a boolean flag that threads can wait on:
-  - event.set()   →  "signal is ON"
-  - event.clear() →  "signal is OFF"
-  - event.wait()  →  "block here until signal turns ON"
+`sounddevice.RawOutputStream` writes raw PCM bytes directly to the audio
+hardware, bypassing the need for any intermediate WAV/MP3 file.
 """
 
+import io
 import threading
-import pyttsx3
-from utils.config import TTS_RATE, TTS_VOLUME, TTS_VOICE_INDEX
+import wave
+from typing import Callable, Optional
+import sounddevice as sd
+from piper.voice import PiperVoice
+from piper.config import SynthesisConfig
+
+from utils.config import (
+    PIPER_MODEL_PATH,
+    PIPER_MODEL_CONFIG,
+    TTS_RATE_SCALE,
+    TTS_VOLUME,
+)
 
 
 class TTSEngine:
-    """Wraps pyttsx3 to provide threaded, controllable text-to-speech."""
+    """
+    Piper-based TTS engine with play / pause / stop / speed control.
+    Drop-in replacement for the old pyttsx3 engine.
+    """
 
     def __init__(self):
-        # Initialise the underlying pyttsx3 engine.
-        # On Linux this automatically uses the espeak-ng backend.
-        self._engine = pyttsx3.init()
-        self._apply_defaults()
+        # Load the voice model once at startup (takes ~1 second)
+        print(f"  Loading Piper voice model: {PIPER_MODEL_PATH}")
+        self._voice = PiperVoice.load(PIPER_MODEL_PATH, config_path=PIPER_MODEL_CONFIG)
 
         # Threading state
         self._thread: threading.Thread | None = None
-        self._stop_event = threading.Event()   # set() = stop speaking
-        self._pause_event = threading.Event()  # set() = paused
-        self._pause_event.clear()              # not paused initially
+        self._stop_event  = threading.Event()
+        self._pause_event = threading.Event()   # set → paused
 
-        # Current state flags (read by the GUI to update button labels)
+        # Public state flags  (read by the GUI to update button labels)
         self.is_speaking = False
-        self.is_paused = False
+        self.is_paused   = False
 
-        # Callback hooks — set these from the GUI if you want to be notified
-        # when speaking finishes.  e.g. engine.on_done = my_function
-        self.on_done: callable | None = None
+        # Speed: 1.0 = normal, 0.5 = half speed, 2.0 = double speed
+        # Piper controls speed via `length_scale` (higher = slower)
+        self.speed = TTS_RATE_SCALE   # default from config
 
-    # ── Configuration ─────────────────────────────────────────────────────────
+        # Volume: 0.0 – 1.0
+        self.volume = TTS_VOLUME
 
-    def _apply_defaults(self):
-        """Apply settings from config.py to the pyttsx3 engine."""
-        self._engine.setProperty("rate", TTS_RATE)
-        self._engine.setProperty("volume", TTS_VOLUME)
-        voices = self._engine.getProperty("voices")
-        if voices and TTS_VOICE_INDEX < len(voices):
-            self._engine.setProperty("voice", voices[TTS_VOICE_INDEX].id)
+        # Optional callback — called when speaking naturally finishes
+        self.on_done: Optional[Callable[[], None]] = None
 
-    @property
-    def rate(self) -> int:
-        """Current speech rate in words-per-minute."""
-        return self._engine.getProperty("rate")
-
-    @rate.setter
-    def rate(self, value: int):
-        """Set speech rate. Typical range: 80–300 wpm."""
-        self._engine.setProperty("rate", value)
-
-    @property
-    def volume(self) -> float:
-        """Current volume (0.0 – 1.0)."""
-        return self._engine.getProperty("volume")
-
-    @volume.setter
-    def volume(self, value: float):
-        self._engine.setProperty("volume", max(0.0, min(1.0, value)))
-
-    def list_voices(self) -> list[str]:
-        """Return the names of all available TTS voices on this system."""
-        voices = self._engine.getProperty("voices")
-        return [v.name for v in voices] if voices else []
-
-    def set_voice_by_index(self, index: int):
-        """Switch to a different voice by its index in list_voices()."""
-        voices = self._engine.getProperty("voices")
-        if voices and 0 <= index < len(voices):
-            self._engine.setProperty("voice", voices[index].id)
-
-    # ── Core speak / control ──────────────────────────────────────────────────
+    # ── Public API ────────────────────────────────────────────────────────────
 
     def speak(self, text: str):
         """
-        Speak *text* in a background thread.
-
-        If something is already being spoken it is stopped first.
-
-        Args:
-            text: The string to speak.
+        Speak *text* asynchronously in a background thread.
+        Any current speech is stopped before starting.
         """
-        # Stop any current speech before starting new
-        self.stop()
+        self.stop()                     # cancel anything already playing
 
         self._stop_event.clear()
         self._pause_event.clear()
         self.is_speaking = True
-        self.is_paused = False
+        self.is_paused   = False
 
         self._thread = threading.Thread(
             target=self._speak_worker,
             args=(text,),
-            daemon=True,    # daemon threads die automatically when the app exits
+            daemon=True,
         )
         self._thread.start()
 
-    def _speak_worker(self, text: str):
-        """
-        Internal worker that runs in a background thread.
-
-        We split the text into sentences so we can check for stop/pause
-        signals between each sentence — pyttsx3 doesn't support mid-sentence
-        interruption natively.
-        """
-        sentences = self._split_into_sentences(text)
-
-        for sentence in sentences:
-            # Check stop flag before each sentence
-            if self._stop_event.is_set():
-                break
-
-            # If paused, wait here until resumed or stopped
-            while self._pause_event.is_set():
-                if self._stop_event.is_set():
-                    break
-                threading.Event().wait(0.1)   # sleep 100ms then check again
-
-            if self._stop_event.is_set():
-                break
-
-            # Speak one sentence synchronously (blocks until done)
-            self._engine.say(sentence)
-            self._engine.runAndWait()
-
-        self.is_speaking = False
-        self.is_paused = False
-
-        # Notify the GUI that reading finished (if callback set)
-        if self.on_done and not self._stop_event.is_set():
-            self.on_done()
-
     def pause(self):
-        """Pause speech after the current sentence finishes."""
+        """Pause playback after the current audio chunk finishes."""
         if self.is_speaking and not self.is_paused:
             self._pause_event.set()
             self.is_paused = True
 
     def resume(self):
-        """Resume a paused reading session."""
+        """Resume a paused session."""
         if self.is_paused:
             self._pause_event.clear()
             self.is_paused = False
 
+    def list_voices(self) -> list[str]:
+        """
+        Return a list of available voice model names.
+        Currently returns just the loaded voice name.
+        (Multi-voice support can be added later.)
+        """
+        return ["en_US-lessac-medium"]
+
     def stop(self):
-        """Immediately stop speaking and clear the queue."""
+        """Immediately stop all playback."""
         if self._thread and self._thread.is_alive():
             self._stop_event.set()
-            self._pause_event.clear()   # unblock any waiting-on-pause loops
-            self._engine.stop()         # interrupt current utterance
-            self._thread.join(timeout=2)
+            self._pause_event.clear()   # unblock any pause-wait loops
+            self._thread.join(timeout=3)
         self.is_speaking = False
-        self.is_paused = False
+        self.is_paused   = False
+
+    # ── Internal worker ───────────────────────────────────────────────────────
+
+    def _speak_worker(self, text: str):
+        """
+        Runs in a background thread.
+
+        Strategy:
+        1. Split text into manageable sentence-sized chunks
+        2. For each chunk: synthesize PCM bytes → stream to sounddevice
+        3. Between chunks: check if stop/pause was requested
+        """
+        sentences = self._split_sentences(text)
+
+        try:
+            for sentence in sentences:
+                # ── Check stop before each sentence ──
+                if self._stop_event.is_set():
+                    break
+
+                # ── Wait while paused ──
+                while self._pause_event.is_set():
+                    if self._stop_event.is_set():
+                        break
+                    threading.Event().wait(0.1)
+
+                if self._stop_event.is_set():
+                    break
+
+                # ── Synthesize this sentence ──
+                import numpy as np
+                
+                syn_config = SynthesisConfig(
+                    length_scale=1.0 / self.speed,   # higher = slower
+                    volume=self.volume,
+                )
+                
+                # Collect all audio chunks from Piper into a single array
+                audio_arrays = []
+                for audio_chunk in self._voice.synthesize(sentence, syn_config):
+                    audio_arrays.append(audio_chunk.audio_int16_array)
+                
+                if not audio_arrays:
+                    continue  # Empty synthesis, skip
+                
+                # Concatenate all chunks into one audio array
+                audio_data = np.concatenate(audio_arrays)
+
+                if self._stop_event.is_set():
+                    break
+
+                # ── Play the audio via sounddevice ──
+                # Piper outputs 16-bit signed integers at 22050 Hz
+                sample_rate = 22050
+                
+                # Non-blocking play with a stop check
+                sd.play(audio_data, samplerate=sample_rate)
+                # Wait until playback completes or stop is requested
+                while sd.get_stream().active:
+                    if self._stop_event.is_set():
+                        sd.stop()
+                        break
+                    threading.Event().wait(0.05)
+
+        finally:
+            self.is_speaking = False
+            self.is_paused   = False
+            # Notify GUI that reading finished naturally
+            if self.on_done and not self._stop_event.is_set():
+                self.on_done()
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     @staticmethod
-    def _split_into_sentences(text: str) -> list[str]:
+    def _split_sentences(text: str) -> list[str]:
         """
-        Simple sentence splitter.
-
-        Splits on '. ', '! ', '? ' so we can pause between sentences.
-        Good enough for most PDF content.
+        Split text into sentence-sized chunks for interruptible playback.
+        We split on sentence-ending punctuation followed by whitespace.
         """
         import re
-        # Split on sentence-ending punctuation followed by a space or newline
         parts = re.split(r'(?<=[.!?])\s+', text)
-        # Filter empty strings and very short fragments
         return [p.strip() for p in parts if len(p.strip()) > 2]
