@@ -2,30 +2,34 @@
 utils/config.py
 ----------------
 Central configuration for the Aloud app.
-All default settings live here. You can change these values to tune
-the app's behaviour without touching any other file.
+Change values here to tune behaviour without touching any other file.
 """
 
-# ── TTS Settings ──────────────────────────────────────────────────────────────
-# Words per minute. Human speech is ~130–150 wpm; raise for faster reading.
-TTS_RATE = 130
+import os
 
-# Volume: 0.0 (silent)  →  1.0 (full)
+# ── Project root (absolute path, works regardless of where you run from) ──────
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# ── Piper TTS Settings ────────────────────────────────────────────────────────
+# Path to the downloaded Piper voice model files
+# Voice: en_US-lessac-medium  (female, US English, neural quality)
+PIPER_MODEL_PATH   = os.path.join(_PROJECT_ROOT, "models", "en_US-lessac-medium.onnx")
+PIPER_MODEL_CONFIG = os.path.join(_PROJECT_ROOT, "models", "en_US-lessac-medium.onnx.json")
+
+# Speed scale: 1.0 = normal speed, 0.75 = slightly slower, 1.5 = faster
+# Tip: 0.9 sounds the most natural for document reading
+TTS_RATE_SCALE = 0.9
+
+# Volume: 0.0 (silent) → 1.0 (full)
 TTS_VOLUME = 1.0
 
-# Voice index to pick from the voices available on this system.
-# 0 = first available voice (usually the default espeak-ng voice).
-TTS_VOICE_INDEX = 0
-
 # ── PDF / OCR Settings ────────────────────────────────────────────────────────
-# Minimum characters extracted from a page before we consider it "text-based".
-# Pages with fewer characters are treated as scanned images and sent to OCR.
+# Pages with fewer embedded characters than this are sent to OCR
 OCR_FALLBACK_THRESHOLD = 20
 
-# DPI used when rendering a PDF page to an image for OCR.
-# Higher = more accurate OCR but slower. 200–300 is a good range.
+# DPI for rendering a page to image for OCR (200–300 is a good range)
 OCR_DPI = 200
 
 # ── App Meta ──────────────────────────────────────────────────────────────────
-APP_NAME = "Aloud"
+APP_NAME    = "Aloud"
 APP_VERSION = "0.1.0"
