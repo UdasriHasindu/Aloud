@@ -25,7 +25,7 @@ TTS_VOLUME = 1.0
 
 # ── PDF / OCR Settings ────────────────────────────────────────────────────────
 # Pages with fewer embedded characters than this are sent to OCR
-OCR_FALLBACK_THRESHOLD = 20
+OCR_FALLBACK_THRESHOLD = 30
 
 # DPI for rendering a page to image for OCR (200–300 is a good range)
 OCR_DPI = 200

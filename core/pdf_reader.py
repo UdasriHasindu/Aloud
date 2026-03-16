@@ -40,19 +40,42 @@ class PDFReader:
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    def get_page_text(self, page_index: int) -> str:
+    def get_page_text(self, page_index: int, ocr_engine=None) -> str:
         """
         Extract the text layer from a single page.
+        If ocr_engine is provided, it will also find any embedded images on the
+        page, run OCR on them, and append the text.
 
         Args:
             page_index: 0-based page number.
+            ocr_engine: Optional instance of OCREngine to read embedded images.
 
         Returns:
-            Extracted text string. Empty string if the page has no text layer.
+            Combined text from the text layer and any embedded images.
         """
         page = self._doc[page_index]
-        text = page.get_text("text")        # "text" = plain text mode
-        return text.strip()
+        text = page.get_text("text").strip()
+
+        # If an OCR engine was passed, look for images on this specific page
+        if ocr_engine:
+            image_list = page.get_images(full=True)
+            for img in image_list:
+                xref = img[0]
+                try:
+                    # Extract the raw image bytes
+                    base_image = self._doc.extract_image(xref)
+                    image_bytes = base_image["image"]
+                    
+                    # Run OCR on this specific image
+                    ocr_text = ocr_engine.extract_text_from_bytes(image_bytes)
+                    
+                    # If we found anything, append it to the main text
+                    if ocr_text.strip():
+                        text += f"\n\n[From Image:]\n{ocr_text.strip()}"
+                except Exception as e:
+                    print(f"Skipping an unreadable image on page {page_index}: {e}")
+
+        return text
 
     def get_page_image(self, page_index: int) -> bytes:
         """
