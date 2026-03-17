@@ -42,25 +42,41 @@ class PDFReader:
 
     def get_page_text(self, page_index: int, ocr_engine=None) -> str:
         """
-        Extract the text layer from a single page.
-        If ocr_engine is provided, it will also find any embedded images on the
-        page, run OCR on them, and append the text.
+        Extract the text layer and any embedded images from a single page,
+        sorted vertically so they are read in the correct top-to-bottom order.
 
         Args:
             page_index: 0-based page number.
             ocr_engine: Optional instance of OCREngine to read embedded images.
 
         Returns:
-            Combined text from the text layer and any embedded images.
+            Combined text arranged in natural reading order.
         """
         page = self._doc[page_index]
-        text = page.get_text("text").strip()
+        
+        # We will collect chunks of text along with their vertical position (y0)
+        # Format: list of tuples (y0, text_content)
+        content_items = []
 
-        # If an OCR engine was passed, look for images on this specific page
+        # 1. Extract native text blocks with coordinates
+        # page.get_text("blocks") returns a list of blocks: (x0, y0, x1, y1, "text", block_no, block_type)
+        # block_type 0 means text, 1 means image.
+        for block in page.get_text("blocks"):
+            if block[6] == 0:  # If it is a text block
+                text = block[4].strip()
+                if text:
+                    y0 = block[1] # Top-most Y coordinate of the block
+                    content_items.append((y0, text))
+
+        # 2. Extract embedded images with coordinates (if OCR is enabled)
         if ocr_engine:
-            image_list = page.get_images(full=True)
-            for img in image_list:
-                xref = img[0]
+            # get_image_info() gives us the bounding boxes of images on the page
+            for img_info in page.get_image_info(xrefs=True):
+                xref = img_info["xref"]
+                # Bounding box of the image on the page
+                bbox = img_info["bbox"] 
+                y0 = bbox[1] # Top-most Y coordinate
+                
                 try:
                     # Extract the raw image bytes
                     base_image = self._doc.extract_image(xref)
@@ -69,13 +85,18 @@ class PDFReader:
                     # Run OCR on this specific image
                     ocr_text = ocr_engine.extract_text_from_bytes(image_bytes)
                     
-                    # If we found anything, append it to the main text
                     if ocr_text.strip():
-                        text += f"\n\n[From Image:]\n{ocr_text.strip()}"
+                        content_items.append((y0, ocr_text.strip()))
                 except Exception as e:
                     print(f"Skipping an unreadable image on page {page_index}: {e}")
 
-        return text
+        # 3. Sort all items by their vertical position (y0) from top to bottom
+        content_items.sort(key=lambda item: item[0])
+
+        # 4. Join all the text together
+        ordered_text = "\n\n".join([item[1] for item in content_items])
+        
+        return ordered_text
 
     def get_page_image(self, page_index: int) -> bytes:
         """
