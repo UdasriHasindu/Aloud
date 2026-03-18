@@ -31,6 +31,10 @@ class MainWindow:
         self.root.grid_columnconfigure(1, weight=1)
         self.root.grid_rowconfigure(0, weight=1)
         
+        # Shortcut keys for navigation
+        self.root.bind("<Left>", lambda e: self.on_prev_page())
+        self.root.bind("<Right>", lambda e: self.on_next_page())
+        
         # Safe shutdown
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
@@ -77,6 +81,9 @@ class MainWindow:
             'on_next': self.on_next_page,
             'on_jump': self.on_jump_page,
             'on_speed_change': self.on_speed_change,
+            'on_zoom_in': self.on_zoom_in,
+            'on_zoom_out': self.on_zoom_out,
+            'on_zoom_reset': self.on_zoom_reset,
         }
         
         self.controls = ControlPanel(self.sidebar, callbacks)
@@ -207,6 +214,15 @@ class MainWindow:
                 self._render_current_page()
         except ValueError:
             pass
+
+    def on_zoom_in(self):
+        self.viewer.zoom_in()
+
+    def on_zoom_out(self):
+        self.viewer.zoom_out()
+
+    def on_zoom_reset(self):
+        self.viewer.zoom_reset()
 
     def on_speed_change(self, scale_value: float):
         self.tts.speed = scale_value

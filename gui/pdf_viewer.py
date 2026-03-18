@@ -15,8 +15,37 @@ class PDFViewer(tk.Canvas):
         self.photo = None       # Tkinter PhotoImage reference
         self.bind("<Configure>", self._on_resize)  # Redraw when window resizes
         
+        # Panning bindings
+        self.bind("<ButtonPress-1>", self._on_drag_start)
+        self.bind("<B1-Motion>", self._on_drag_motion)
+        self.bind("<ButtonRelease-1>", self._on_drag_stop)
+        
+        self.zoom_factor = 1.0
+        
         self.current_reader = None
         self.current_page = 0
+
+    def _on_drag_start(self, event):
+        self.config(cursor="fleur")
+        self.scan_mark(event.x, event.y)
+
+    def _on_drag_motion(self, event):
+        self.scan_dragto(event.x, event.y, gain=1)
+
+    def _on_drag_stop(self, event):
+        self.config(cursor="")
+
+    def zoom_in(self):
+        self.zoom_factor += 0.2
+        self._redraw()
+
+    def zoom_out(self):
+        self.zoom_factor = max(0.2, self.zoom_factor - 0.2)
+        self._redraw()
+        
+    def zoom_reset(self):
+        self.zoom_factor = 1.0
+        self._redraw()
 
     def display_page(self, reader: PDFReader, page_index: int):
         """Render and display the given page from the PDF reader."""
@@ -60,21 +89,29 @@ class PDFViewer(tk.Canvas):
         # Original image dimensions
         img_w, img_h = self.original_image.size
 
-        # Calculate scaling factor to fit *within* the canvas (maintain aspect ratio)
+        # Calculate base scaling factor to fit within the canvas identically
         scale_w = cw / img_w
         scale_h = ch / img_h
-        scale = min(scale_w, scale_h) * 0.95  # 95% to leave a small margin
+        base_scale = min(scale_w, scale_h) * 0.95  # 95% to leave a small margin
+        
+        # Apply the explicit user zoom on top of the auto-fit scale
+        final_scale = base_scale * self.zoom_factor
 
-        new_width = max(1, int(img_w * scale))
-        new_height = max(1, int(img_h * scale))
+        new_width = max(1, int(img_w * final_scale))
+        new_height = max(1, int(img_h * final_scale))
 
-        # Scale down 
-        # (LANCZOS is high quality downsampling, good for text)
+        # Scale down / up
         resized_img = self.original_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
         
-        # Convert to Tkinter PhotoImage (must keep a reference to self.photo!)
+        # Convert to Tkinter PhotoImage
         self.photo = ImageTk.PhotoImage(resized_img)
 
-        # Clear old image and draw new one centered
         self.delete("all")
-        self.create_image(cw // 2, ch // 2, anchor=tk.CENTER, image=self.photo)
+        
+        # If the image is smaller than the canvas, center it perfectly.
+        # If it's larger, anchor it to the center of its own scroll region to allow panning.
+        cx = max(cw, new_width) // 2
+        cy = max(ch, new_height) // 2
+        
+        self.create_image(cx, cy, anchor=tk.CENTER, image=self.photo)
+        self.configure(scrollregion=(0, 0, max(cw, new_width), max(ch, new_height)))

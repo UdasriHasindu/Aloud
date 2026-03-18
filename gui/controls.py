@@ -49,6 +49,21 @@ class ControlPanel(ctk.CTkFrame):
         )
         self.btn_next.pack(side="right")
 
+        # ── Zoom Row ──
+        zoom_frame = ctk.CTkFrame(self, fg_color="transparent")
+        zoom_frame.pack(fill="x", pady=(0, 15))
+        
+        ctk.CTkLabel(zoom_frame, text="Zoom:", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=(0, 10))
+        
+        self.btn_zoom_out = ctk.CTkButton(zoom_frame, text="-", width=35, command=self.cb.get('on_zoom_out'))
+        self.btn_zoom_out.pack(side="left", padx=2)
+        
+        self.btn_zoom_reset = ctk.CTkButton(zoom_frame, text="100%", width=45, command=self.cb.get('on_zoom_reset'), fg_color="transparent", border_width=1)
+        self.btn_zoom_reset.pack(side="left", padx=2)
+
+        self.btn_zoom_in = ctk.CTkButton(zoom_frame, text="+", width=35, command=self.cb.get('on_zoom_in'))
+        self.btn_zoom_in.pack(side="left", padx=2)
+
         # ── Playback Controls Row ──
         play_frame = ctk.CTkFrame(self, fg_color="transparent")
         play_frame.pack(fill="x", pady=10)
@@ -135,6 +150,9 @@ class ControlPanel(ctk.CTkFrame):
             self.btn_stop.configure(state="disabled")
             self.scale_speed.configure(state="disabled")
             self.ent_page.configure(state="disabled")
+            self.btn_zoom_in.configure(state="disabled")
+            self.btn_zoom_out.configure(state="disabled")
+            self.btn_zoom_reset.configure(state="disabled")
             
         elif state == "stopped":
             self.btn_prev.configure(state="normal")
@@ -144,6 +162,9 @@ class ControlPanel(ctk.CTkFrame):
             self.btn_stop.configure(state="disabled")
             self.scale_speed.configure(state="normal")
             self.ent_page.configure(state="normal")
+            self.btn_zoom_in.configure(state="normal")
+            self.btn_zoom_out.configure(state="normal")
+            self.btn_zoom_reset.configure(state="normal")
             self.btn_play.configure(text="▶ Play")
             
         elif state == "playing":
