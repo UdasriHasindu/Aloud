@@ -6,9 +6,15 @@ Change values here to tune behaviour without touching any other file.
 """
 
 import os
+import sys
 
-# ── Project root (absolute path, works regardless of where you run from) ──────
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# ── Project root (safe for PyInstaller bundles) ───────────────────────────────
+if getattr(sys, 'frozen', False):
+    # If the application is run as a bundle (PyInstaller)
+    _PROJECT_ROOT = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+else:
+    # If run normally via python3
+    _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # ── Piper TTS Settings ────────────────────────────────────────────────────────
 # Path to the downloaded Piper voice model files
