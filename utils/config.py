@@ -17,10 +17,14 @@ else:
     _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # ── Piper TTS Settings ────────────────────────────────────────────────────────
-# Path to the downloaded Piper voice model files
-# Voice: en_US-lessac-medium  (female, US English, neural quality)
-PIPER_MODEL_PATH   = os.path.join(_PROJECT_ROOT, "models", "en_US-lessac-medium.onnx")
-PIPER_MODEL_CONFIG = os.path.join(_PROJECT_ROOT, "models", "en_US-lessac-medium.onnx.json")
+# Path to the downloaded Piper voice model files in the user's home directory
+_DATA_DIR = os.path.expanduser("~/.local/share/aloud/models")
+PIPER_MODEL_PATH   = os.path.join(_DATA_DIR, "en_US-lessac-medium.onnx")
+PIPER_MODEL_CONFIG = os.path.join(_DATA_DIR, "en_US-lessac-medium.onnx.json")
+
+# Remote URLs for first-run download
+PIPER_MODEL_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/lessac/medium/en_US-lessac-medium.onnx"
+PIPER_CONFIG_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json"
 
 # Speed scale: 1.0 = normal speed, 0.75 = slightly slower, 1.5 = faster
 # Tip: 0.9 sounds the most natural for document reading
