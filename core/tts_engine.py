@@ -172,18 +172,35 @@ class TTSEngine:
                 if self._stop_event.is_set():
                     break
 
-                # ── Play the audio via sounddevice ──
-                # Piper outputs 16-bit signed integers at 22050 Hz
+                # ── Play the audio chunk-by-chunk for instant pause ──
                 sample_rate = 22050
                 
-                # Non-blocking play with a stop check
-                sd.play(audio_data, samplerate=sample_rate)
-                # Wait until playback completes or stop is requested
-                while sd.get_stream().active:
-                    if self._stop_event.is_set():
-                        sd.stop()
-                        break
-                    threading.Event().wait(0.05)
+                try:
+                    stream = sd.OutputStream(samplerate=sample_rate, channels=1, dtype='int16')
+                    stream.start()
+                    
+                    # Write in tiny chunks (e.g., ~0.1 seconds) so we can pause mid-sentence
+                    chunk_size = int(sample_rate * 0.1)
+                    
+                    for i in range(0, len(audio_data), chunk_size):
+                        if self._stop_event.is_set():
+                            break
+                            
+                        # Wait here if paused
+                        while self._pause_event.is_set():
+                            if self._stop_event.is_set():
+                                break
+                            threading.Event().wait(0.05)
+                        
+                        if self._stop_event.is_set():
+                            break
+                            
+                        chunk = audio_data[i:i + chunk_size]
+                        stream.write(chunk)
+                finally:
+                    if 'stream' in locals() and stream.active:
+                        stream.stop()
+                        stream.close()
 
         finally:
             self.is_speaking = False

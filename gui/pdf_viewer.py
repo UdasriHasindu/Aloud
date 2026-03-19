@@ -10,7 +10,7 @@ from core.pdf_reader import PDFReader
 
 class PDFViewer(tk.Canvas):
     def __init__(self, master, **kwargs):
-        super().__init__(master, bg="darkgray", **kwargs)
+        super().__init__(master, bg="#2b2b2b", **kwargs)
         self.image = None       # Keep reference to avoid garbage collection
         self.photo = None       # Tkinter PhotoImage reference
         self.bind("<Configure>", self._on_resize)  # Redraw when window resizes
