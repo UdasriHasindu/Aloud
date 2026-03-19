@@ -62,3 +62,8 @@ ehthumbs.db
 
 # Logs
 *.log
+
+# Packaging and Build Artifacts
+*.spec
+*.deb
+*_amd64/
