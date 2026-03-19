@@ -27,9 +27,11 @@ hardware, bypassing the need for any intermediate WAV/MP3 file.
 """
 
 import io
+import re
 import threading
 import wave
 from typing import Callable, Optional
+import numpy as np
 import sounddevice as sd
 from piper.voice import PiperVoice
 from piper.config import SynthesisConfig
@@ -118,7 +120,7 @@ class TTSEngine:
         if self._thread and self._thread.is_alive():
             self._stop_event.set()
             self._pause_event.clear()   # unblock any pause-wait loops
-            self._thread.join(timeout=3)
+            self._thread.join(timeout=1)
         self.is_speaking = False
         self.is_paused   = False
 
@@ -151,8 +153,6 @@ class TTSEngine:
                     break
 
                 # ── Synthesize this sentence ──
-                import numpy as np
-                
                 syn_config = SynthesisConfig(
                     length_scale=1.0 / self.speed,   # higher = slower
                     volume=self.volume,
@@ -200,6 +200,5 @@ class TTSEngine:
         Split text into sentence-sized chunks for interruptible playback.
         We split on sentence-ending punctuation followed by whitespace.
         """
-        import re
         parts = re.split(r'(?<=[.!?])\s+', text)
         return [p.strip() for p in parts if len(p.strip()) > 2]

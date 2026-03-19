@@ -31,9 +31,12 @@ class MainWindow:
         self.root.grid_columnconfigure(1, weight=1)
         self.root.grid_rowconfigure(0, weight=1)
         
-        # Shortcut keys for navigation
+        # Keyboard shortcuts
         self.root.bind("<Left>", lambda e: self.on_prev_page())
         self.root.bind("<Right>", lambda e: self.on_next_page())
+        self.root.bind("<space>", lambda e: self.on_play_pause_toggle())
+        self.root.bind("<Control-o>", lambda e: self.on_open_file())
+        self.root.bind("<Control-q>", lambda e: self.on_closing())
         
         # Safe shutdown
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -184,9 +187,31 @@ class MainWindow:
         self._update_ui_state()
 
     def _on_tts_finished(self):
-        self.root.after(0, self._update_ui_state)
+        """Called from the TTS background thread when a page finishes reading naturally."""
+        self.root.after(0, self._auto_advance_page)
+
+    def _auto_advance_page(self):
+        """Advance to the next page and keep reading, or stop if at the last page."""
+        if not self.pdf_reader:
+            return
+        if self.current_page < self.pdf_reader.page_count - 1:
+            self.current_page += 1
+            self._render_current_page()
+            self.on_play()     # continue reading on the new page
+        else:
+            self.controls.update_status("Finished reading document.")
+            self._update_ui_state()
 
     # ── Navigation & Settings Callbacks ───────────────────────────────────────
+
+    def on_play_pause_toggle(self):
+        """Space bar: if stopped start playing; if playing pause; if paused resume."""
+        if not self.pdf_reader:
+            return
+        if self.tts.is_speaking:
+            self.on_pause()
+        else:
+            self.on_play()
 
     def on_prev_page(self):
         if self.pdf_reader and self.current_page > 0:

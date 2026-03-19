@@ -36,7 +36,7 @@ class PDFViewer(tk.Canvas):
         self.config(cursor="")
 
     def zoom_in(self):
-        self.zoom_factor += 0.2
+        self.zoom_factor = min(5.0, self.zoom_factor + 0.2)
         self._redraw()
 
     def zoom_out(self):

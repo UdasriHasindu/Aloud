@@ -171,16 +171,12 @@ class ControlPanel(ctk.CTkFrame):
             self.btn_prev.configure(state="disabled")
             self.btn_next.configure(state="disabled")
             self.btn_play.configure(state="disabled")
-            self.btn_pause.configure(state="normal")
-            self.btn_stop.configure(state="normal")
-            self.ent_page.configure(state="disabled")
-            
-        elif state == "paused":
-            self.btn_play.configure(state="disabled")
-            self.btn_pause.configure(state="normal")
-            self.btn_pause.configure(text="▶ Resume")
+            self.btn_pause.configure(state="normal", text="⏸ Pause")
             self.btn_stop.configure(state="normal")
             self.ent_page.configure(state="disabled")
 
-        if state != "paused":
-             self.btn_pause.configure(text="⏸ Pause")
+        elif state == "paused":
+            self.btn_play.configure(state="disabled")
+            self.btn_pause.configure(state="normal", text="▶ Resume")
+            self.btn_stop.configure(state="normal")
+            self.ent_page.configure(state="disabled")
