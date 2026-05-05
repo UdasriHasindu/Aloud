@@ -34,9 +34,7 @@ ctk.set_default_color_theme("blue")
 
 class MainWindow:
     def __init__(self):
-        self.root = ctk.CTk()
-        # Set wm_class so the desktop environment recognizes the app name correctly instead of "Tk"
-        self.root.wm_class("aloud", "Aloud")
+        self.root = ctk.CTk(className="Aloud")
         self.root.title(f"{APP_NAME} {APP_VERSION}")
         self.root.minsize(900, 600)
         self.root.attributes("-zoomed", True)  # Start maximized (Linux)
