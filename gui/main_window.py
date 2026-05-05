@@ -34,8 +34,8 @@ class MainWindow:
     def __init__(self):
         self.root = ctk.CTk()
         self.root.title(f"{APP_NAME} {APP_VERSION}")
-        self.root.geometry("1200x820")
         self.root.minsize(900, 600)
+        self.root.attributes("-zoomed", True)  # Start maximized (Linux)
 
         # Root grid: row 0 = toolbar, row 1 = canvas
         self.root.grid_rowconfigure(1, weight=1)
