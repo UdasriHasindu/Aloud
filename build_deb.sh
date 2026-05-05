@@ -42,11 +42,12 @@ cat <<EOF > "$DIR/usr/share/applications/aloud.desktop"
 Version=1.0
 Name=Aloud
 Comment=Neural TTS PDF Reader
-Exec=/usr/bin/aloud
+Exec=/usr/bin/aloud %f
 Icon=aloud
 Terminal=false
 Type=Application
 Categories=Office;Viewer;Accessibility;
+MimeType=application/pdf;
 EOF
 
 echo "📥 Copying built binary and assets..."

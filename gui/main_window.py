@@ -156,6 +156,10 @@ class MainWindow:
         if not filepath:
             return
 
+        self.load_document(filepath)
+
+    def load_document(self, filepath: str):
+        """Loads a PDF document directly without a file dialog."""
         self.on_stop()
         if self.pdf_reader:
             self.pdf_reader.close()
