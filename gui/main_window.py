@@ -149,10 +149,31 @@ class MainWindow:
     # ── File handling ──────────────────────────────────────────────────────
 
     def on_open_file(self):
-        filepath = filedialog.askopenfilename(
-            title="Open PDF",
-            filetypes=[("PDF Files", "*.pdf")],
-        )
+        import shutil
+        import subprocess
+
+        filepath = ""
+        # Try to use Zenity (native GTK dialog on Linux) for a better, larger UI
+        if shutil.which("zenity"):
+            try:
+                result = subprocess.run(
+                    ["zenity", "--file-selection", "--title=Open PDF", "--file-filter=PDF Files | *.pdf"],
+                    capture_output=True, text=True
+                )
+                if result.returncode == 0:
+                    filepath = result.stdout.strip()
+                elif result.returncode == 1:
+                    return  # User cancelled
+            except Exception:
+                pass
+
+        # Fallback to standard Tkinter dialog if Zenity is not available or fails
+        if not filepath:
+            filepath = filedialog.askopenfilename(
+                title="Open PDF",
+                filetypes=[("PDF Files", "*.pdf")],
+            )
+            
         if not filepath:
             return
 
