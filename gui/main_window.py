@@ -24,7 +24,9 @@ from core.ocr_engine import OCREngine
 from core.tts_engine import TTSEngine
 from gui.pdf_viewer import PDFViewer
 from gui.controls import ControlPanel
-from utils.config import APP_NAME, APP_VERSION
+from utils.config import APP_NAME, APP_VERSION, _PROJECT_ROOT
+import os
+from PIL import Image, ImageTk
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -33,9 +35,18 @@ ctk.set_default_color_theme("blue")
 class MainWindow:
     def __init__(self):
         self.root = ctk.CTk()
+        # Set wm_class so the desktop environment recognizes the app name correctly instead of "Tk"
+        self.root.wm_class("aloud", "Aloud")
         self.root.title(f"{APP_NAME} {APP_VERSION}")
         self.root.minsize(900, 600)
         self.root.attributes("-zoomed", True)  # Start maximized (Linux)
+        
+        # Load and set the application icon
+        icon_path = os.path.join(_PROJECT_ROOT, "aloud_app_theme.png")
+        if os.path.exists(icon_path):
+            img = Image.open(icon_path)
+            self.icon = ImageTk.PhotoImage(img)
+            self.root.wm_iconphoto(True, self.icon)
 
         # Root grid: row 0 = toolbar, row 1 = canvas
         self.root.grid_rowconfigure(1, weight=1)
